@@ -25,7 +25,7 @@ ImmoNoise is a Google Chrome extension that displays road, rail, and overall noi
 3. Enable **Developer mode** (toggle in the top right corner).
 4. Click **Load unpacked**.
 5. Select the `ImmoNoise` folder where the `manifest.json` is located.
-6. Visit any [ImmobilienScout24 Expose](https://www.immobilienscout24.de/expose/...) page in Berlin.
+6. Visit any ImmobilienScout24 Expose page in Berlin.
 
 ## Technical Details
 
