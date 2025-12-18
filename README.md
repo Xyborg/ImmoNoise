@@ -1,8 +1,6 @@
 # <img src="icon.svg" width="24" alt="ImmoNoise Logo"> ImmoNoise - Noise Pollution | Chrome Extension
 
-
-
-ImmoNoise is a premium Google Chrome extension that displays road, rail, and overall noise pollution levels directly on **ImmobilienScout24** property expose pages. Specifically designed for **Berlin**, it provides users with crucial environmental data before they even visit a property.
+ImmoNoise is a Google Chrome extension that displays road, rail, and overall noise pollution levels directly on **ImmobilienScout24** property expose pages. Specifically designed for **Berlin**, it provides users with crucial environmental data before they even visit a property.
 
 ![ImmoNoise Preview](preview.png)
 
