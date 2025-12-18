@@ -1,4 +1,4 @@
-# <img src="icon.svg" width="20" alt="ImmoNoise Logo"> ImmoNoise - Noise Pollution | Chrome Extension
+# <img src="icon.svg" width="24" alt="ImmoNoise Logo"> ImmoNoise - Noise Pollution | Chrome Extension
 
 
 
