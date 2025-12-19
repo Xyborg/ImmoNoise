@@ -6,6 +6,7 @@ ImmoNoise is a Google Chrome extension that displays road, rail, and overall noi
 
 ### Key Features
 
+- **Hybrid Fetching Architecture**: Uses a Cloudflare Worker for speed and caching, with a seamless client-side fallback to direct APIs if the proxy is unavailable.
 - **Multi-Source Noise Data**: Displays Road Traffic, Tram/U-Bahn, and Sum of All Traffic Sources.
 - **Smart City Detection**: Automatically detects the city via JSON-LD schema (currently optimized for Berlin).
 - **Proactive UI**: Shows "Coming soon" for properties outside Berlin to manage expectations.
@@ -15,7 +16,7 @@ ImmoNoise is a Google Chrome extension that displays road, rail, and overall noi
   - 🟡 **Yellow**: 59 - 64 dB(A)
   - 🔴 **Red**: 64 - 69 dB(A)
   - 🟣 **Purple**: 69 - 74 dB(A) (Loud)
-- **High Performance**: Parallelized API fetching and idle-loading to ensure zero impact on page speed.
+- **Edge Caching**: Data is cached for 30 days at the edge, reducing total requests to `berlin.de` by ~90%.
 - **Premium Design**: Modern glassmorphism UI with smooth animations and an animated wave logo.
 
 ## Installation (Developer Mode)
@@ -27,9 +28,27 @@ ImmoNoise is a Google Chrome extension that displays road, rail, and overall noi
 5. Select the `ImmoNoise` folder where the `manifest.json` is located.
 6. Visit any ImmobilienScout24 Expose page in Berlin.
 
+## Architecture
+
+ImmoNoise uses a **Worker-first** approach:
+1. **Primary**: Fetch from `api-immonoise.martinaberastegue.com` (Cloudflare Worker).
+2. **Cache**: Results are cached for 30 days to ensure sub-100ms response times.
+3. **Fallback**: If the Worker is unreachable or blocked, the extension automatically performs the 4-step fetching process directly from the user's browser.
+
+```mermaid
+graph TD
+    A[Detect Address] --> B{Try Cloudflare Worker}
+    B -- "Success (Cached/New)" --> C[Update UI]
+    B -- "Failure (Blocked/Down)" --> D[Direct Fetch: Berlin GDI]
+    D --> E[Geosearch API]
+    E --> F[WMS GetFeatureInfo x3]
+    F --> C
+```
+
 ## Technical Details
 
 - **Manifest V3**: Compliant with the latest Chrome extension standards.
+- **Worker Proxy**: Built with Cloudflare Workers to aggregate and normalize WMS data.
 - **APIs Used**:
   - [Berlin GDI Geosearch](https://gdi.berlin.de/searches/bkg/geosearch)
   - [Berlin GDI WMS (Umweltatlas 2022)](https://gdi.berlin.de/services/wms/ua_stratlaerm_2022)

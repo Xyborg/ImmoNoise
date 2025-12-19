@@ -6,6 +6,9 @@
     let currentAddress = null;
     let badgeElement = null;
 
+    // Final custom domain for your Worker
+    const WORKER_URL = 'https://api-immonoise.martinaberastegue.com';
+
     function detectCity() {
         try {
             const scripts = document.querySelectorAll('script[type="application/ld+json"]');
@@ -110,6 +113,17 @@
         return badgeElement;
     }
 
+    async function fetchFromWorker(address) {
+        try {
+            const response = await fetch(`${WORKER_URL}/noise?address=${encodeURIComponent(address)}`);
+            if (!response.ok) throw new Error(`Worker returned ${response.status}`);
+            return await response.json();
+        } catch (err) {
+            console.warn("ImmoNoise: Worker fetch failed, falling back to local.", err);
+            return null;
+        }
+    }
+
     async function fetchLayerData(address, layerName) {
         try {
             const encodedAddress = encodeURIComponent(address);
@@ -174,30 +188,41 @@
             }
 
             try {
-                // Fetch all sources in parallel
-                const [roadNoise, railNoise, totalNoise] = await Promise.allSettled([
-                    fetchLayerData(addressText, 'bb_strasse_gesamt_den2022'),
-                    fetchLayerData(addressText, 'bc_tram_ubahn_den2022'),
-                    fetchLayerData(addressText, 'bf_gesamtlaerm_den2022')
-                ]);
+                // Try Worker first
+                const workerData = await fetchFromWorker(addressText);
 
-                createBadge([
-                    {
-                        label: 'Road Traffic',
-                        value: roadNoise.status === 'fulfilled' ? roadNoise.value : 'Error',
-                        error: roadNoise.status === 'rejected' ? roadNoise.reason.message : null
-                    },
-                    {
-                        label: 'Tram & U-Bahn',
-                        value: railNoise.status === 'fulfilled' ? railNoise.value : 'Error',
-                        error: railNoise.status === 'rejected' ? railNoise.reason.message : null
-                    },
-                    {
-                        label: 'Sum of All Traffic',
-                        value: totalNoise.status === 'fulfilled' ? totalNoise.value : 'Error',
-                        error: totalNoise.status === 'rejected' ? totalNoise.reason.message : null
-                    }
-                ]);
+                if (workerData) {
+                    createBadge([
+                        { label: 'Road Traffic', value: workerData.road },
+                        { label: 'Tram & U-Bahn', value: workerData.rail },
+                        { label: 'Sum of All Traffic', value: workerData.total }
+                    ]);
+                } else {
+                    // Fallback: Fetch all sources in parallel locally
+                    const [roadNoise, railNoise, totalNoise] = await Promise.allSettled([
+                        fetchLayerData(addressText, 'bb_strasse_gesamt_den2022'),
+                        fetchLayerData(addressText, 'bc_tram_ubahn_den2022'),
+                        fetchLayerData(addressText, 'bf_gesamtlaerm_den2022')
+                    ]);
+
+                    createBadge([
+                        {
+                            label: 'Road Traffic',
+                            value: roadNoise.status === 'fulfilled' ? roadNoise.value : 'Error',
+                            error: roadNoise.status === 'rejected' ? roadNoise.reason.message : null
+                        },
+                        {
+                            label: 'Tram & U-Bahn',
+                            value: railNoise.status === 'fulfilled' ? railNoise.value : 'Error',
+                            error: railNoise.status === 'rejected' ? railNoise.reason.message : null
+                        },
+                        {
+                            label: 'Sum of All Traffic',
+                            value: totalNoise.status === 'fulfilled' ? totalNoise.value : 'Error',
+                            error: totalNoise.status === 'rejected' ? totalNoise.reason.message : null
+                        }
+                    ]);
+                }
             } catch (err) {
                 console.error("ImmoNoise Global Error:", err);
             }
