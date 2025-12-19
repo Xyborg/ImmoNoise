@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "ImmoNoise - Noise Pollution",
-    "version": "1.0.1",
+    "version": "1.0.3",
     "description": "Shows noise pollution levels for Berlin properties on ImmobilienScout24.",
     "permissions": [
         "storage"

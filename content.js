@@ -146,6 +146,32 @@
         }
 
         badgeElement.appendChild(bodyEl);
+
+        // Info Section (Layman Explanation)
+        const infoEl = document.createElement('div');
+        infoEl.className = 'immo-noise-info';
+        infoEl.innerHTML = `
+            <p><strong>How it works:</strong> We use the address data found in this listing to fetch high-precision noise maps from the <strong>Berlin Environmental Atlas</strong>.</p>
+            <p>This shows you the expected noise from road traffic and trains at this exact location, helping you understand the environment before you step inside.</p>
+        `;
+        badgeElement.appendChild(infoEl);
+
+        // Footer (About this toggle)
+        const footerEl = document.createElement('div');
+        footerEl.className = 'immo-noise-footer';
+
+        const aboutToggle = document.createElement('button');
+        aboutToggle.className = 'immo-noise-toggle';
+        aboutToggle.innerText = 'About this';
+        aboutToggle.onclick = (e) => {
+            if (e) e.stopPropagation();
+            badgeElement.classList.toggle('is-expanded');
+            aboutToggle.innerText = badgeElement.classList.contains('is-expanded') ? 'Close information' : 'About this';
+        };
+
+        footerEl.appendChild(aboutToggle);
+        badgeElement.appendChild(footerEl);
+
         document.body.appendChild(badgeElement);
         return badgeElement;
     }
