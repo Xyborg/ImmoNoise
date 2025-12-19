@@ -9,7 +9,44 @@
     // Final custom domain for your Worker
     const WORKER_URL = 'https://api-immonoise.martinaberastegue.com';
 
+    function getIS24Data() {
+        try {
+            const scripts = document.querySelectorAll('script');
+            for (const s of scripts) {
+                // Look for the script containing locationAddress
+                if (s.innerText.includes('locationAddress:')) {
+                    const text = s.innerText;
+
+                    // Use regex that handles both "Value" and undefined (without quotes)
+                    const extract = (key) => {
+                        const m = text.match(new RegExp(`${key}:\\s*(?:"(.*?)"|undefined|([^,\\s}]*))`));
+                        if (!m) return null;
+                        const val = m[1] || m[2];
+                        return val === 'undefined' ? null : val;
+                    };
+
+                    const city = extract('city');
+                    const zip = extract('zip');
+                    const street = extract('street');
+                    const houseNumber = extract('houseNumber');
+                    const isFullAddress = text.match(/isFullAddress:\s*(true|false)/)?.[1] === 'true';
+
+                    if (city || zip) {
+                        return { city, zip, street, houseNumber, isFullAddress };
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("ImmoNoise: Error extracting IS24 data", e);
+        }
+        return null;
+    }
+
     function detectCity() {
+        // First try the high-quality script data
+        const is24Data = getIS24Data();
+        if (is24Data?.city) return is24Data.city;
+
         try {
             const scripts = document.querySelectorAll('script[type="application/ld+json"]');
             for (const script of scripts) {
@@ -180,16 +217,35 @@
 
             currentAddress = addressText;
 
-            // Step 1: Detect City
-            const city = detectCity();
-            if (city && city.toLowerCase() !== 'berlin') {
-                createBadge([], `We will add ${city} soon.`);
+            const is24Data = getIS24Data();
+
+            // Step 1: Detect City & Handle Availability
+            const city = is24Data?.city || detectCity();
+            const cityName = city || 'this city';
+
+            if (cityName.toLowerCase() !== 'berlin') {
+                createBadge([], `We will add ${cityName} soon.`);
                 return;
+            }
+
+            // Step 2: Check Address Completeness
+            let addressToLookup = addressText;
+
+            if (is24Data) {
+                if (!is24Data.isFullAddress) {
+                    createBadge([], "No address available for this place.");
+                    return;
+                }
+                // Construct high-quality address
+                // Format: Street HouseNumber, Zip City
+                addressToLookup = `${is24Data.street || ''} ${is24Data.houseNumber || ''}, ${is24Data.zip || ''} ${is24Data.city || ''}`.trim();
+                // Fix double commas if any parts were missing
+                addressToLookup = addressToLookup.replace(/,\s*,/g, ',').replace(/^,/, '').trim();
             }
 
             try {
                 // Try Worker first
-                const workerData = await fetchFromWorker(addressText);
+                const workerData = await fetchFromWorker(addressToLookup);
 
                 if (workerData) {
                     createBadge([
@@ -200,9 +256,9 @@
                 } else {
                     // Fallback: Fetch all sources in parallel locally
                     const [roadNoise, railNoise, totalNoise] = await Promise.allSettled([
-                        fetchLayerData(addressText, 'bb_strasse_gesamt_den2022'),
-                        fetchLayerData(addressText, 'bc_tram_ubahn_den2022'),
-                        fetchLayerData(addressText, 'bf_gesamtlaerm_den2022')
+                        fetchLayerData(addressToLookup, 'bb_strasse_gesamt_den2022'),
+                        fetchLayerData(addressToLookup, 'bc_tram_ubahn_den2022'),
+                        fetchLayerData(addressToLookup, 'bf_gesamtlaerm_den2022')
                     ]);
 
                     createBadge([
