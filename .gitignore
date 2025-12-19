@@ -1,3 +1,5 @@
 .DS_Store
 worker/
 .dev.vars
+releases/
+build_release.py
