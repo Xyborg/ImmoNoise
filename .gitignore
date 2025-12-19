@@ -3,3 +3,4 @@ worker/
 .dev.vars
 releases/
 build_release.py
+store_description.md
