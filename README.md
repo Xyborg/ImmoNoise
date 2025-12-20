@@ -19,6 +19,7 @@ ImmoNoise is a Google Chrome extension that displays road, rail, and overall noi
   - 🔴 **Red**: 64 - 69 dB(A)
   - 🟣 **Purple**: 69 - 74 dB(A) (Loud)
 - **Interactive Noise Map**: View the noise data on a live map embedded directly in the badge, rendered locally with Leaflet.
+
 ![ImmoNoise Preview](preview_map.png)
 - **Edge Caching**: Data is cached for 30 days at the edge, reducing total requests to `berlin.de` by ~90%.
 - **Premium Design**: Modern glassmorphism UI with smooth animations and an animated wave logo.
