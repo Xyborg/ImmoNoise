@@ -73,6 +73,13 @@
             badgeElement.remove();
         }
 
+        // Reset Map State to ensure clean slate
+        if (map) {
+            map.remove();
+            map = null;
+        }
+        mapInitialized = false;
+
         badgeElement = document.createElement('div');
         badgeElement.className = 'immo-noise-badge';
 
@@ -147,6 +154,11 @@
 
         badgeElement.appendChild(bodyEl);
 
+        // Map Container
+        const mapEl = document.createElement('div');
+        mapEl.id = 'immo-noise-map';
+        badgeElement.appendChild(mapEl);
+
         // Info Section (Layman Explanation)
         const infoEl = document.createElement('div');
         infoEl.className = 'immo-noise-info';
@@ -163,22 +175,34 @@
         const aboutToggle = document.createElement('button');
         aboutToggle.className = 'immo-noise-toggle';
         aboutToggle.innerText = 'About this';
-        aboutToggle.onclick = (e) => {
-            if (e) e.stopPropagation();
+        // Use addEventListener for better reliability
+        aboutToggle.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
             badgeElement.classList.toggle('is-expanded');
             aboutToggle.innerText = badgeElement.classList.contains('is-expanded') ? 'Close information' : 'About this';
-        };
+        });
 
         footerEl.appendChild(aboutToggle);
         badgeElement.appendChild(footerEl);
 
         document.body.appendChild(badgeElement);
+
+        // Initialize Map Immediately (hidden)
+        // The ResizeObserver will handle the layout when it expands.
+        if (currentWorkerData) {
+            // Small delay to ensure DOM insertion
+            setTimeout(() => {
+                initMap(currentWorkerData);
+            }, 50);
+        }
+
         return badgeElement;
     }
 
     async function fetchFromWorker(address) {
         try {
-            const response = await fetch(`${WORKER_URL}/noise?address=${encodeURIComponent(address)}`);
+            const response = await fetch(`${WORKER_URL}/noise/v1?address=${encodeURIComponent(address)}`);
             if (!response.ok) throw new Error(`Worker returned ${response.status}`);
             return await response.json();
         } catch (err) {
@@ -226,7 +250,7 @@
                 props["Lärmindex L DEN (Tag/Abend/Nacht) in dB(A)"] ??
                 Object.values(props).find(v => typeof v === "string" && v.includes("dB(A)"));
 
-            return dbaValue || "bis 55 dB(A)";
+            return translateNoiseLevel(dbaValue || "bis 55 dB(A)");
         } catch (err) {
             console.error(`ImmoNoise Error [${layerName}]:`, err);
             throw err;
@@ -274,10 +298,12 @@
                 const workerData = await fetchFromWorker(addressToLookup);
 
                 if (workerData) {
+                    currentWorkerData = workerData; // Store for Map
+                    const noise = workerData.noise;
                     createBadge([
-                        { label: 'Road Traffic', value: workerData.road },
-                        { label: 'Tram & U-Bahn', value: workerData.rail },
-                        { label: 'Sum of All Traffic', value: workerData.total }
+                        { label: 'Road Traffic', value: noise.road },
+                        { label: 'Tram & U-Bahn', value: noise.rail },
+                        { label: 'Sum of All Traffic', value: noise.total }
                     ]);
                 } else {
                     // Fallback: Fetch all sources in parallel locally
@@ -324,6 +350,110 @@
         window.addEventListener('load', init);
     }
 
+    // Global variables for Map
+    let map = null;
+    let mapInitialized = false;
+    let currentWorkerData = null; // Store data for map usage
+
+    function initMap(data) {
+        if (mapInitialized || !data || !data.center_wgs84) return;
+
+        const container = document.getElementById('immo-noise-map');
+        if (!container) return;
+
+        // Use canvas for better performance and to avoid SVG issues in extensions
+        map = L.map('immo-noise-map', {
+            zoomControl: false,
+            attributionControl: false,
+            zoomSnap: 0.1,
+            preferCanvas: true
+        });
+
+        // ResizeObserver to handle CSS transitions automatically
+        const resizeObserver = new ResizeObserver(() => {
+            if (map) {
+                map.invalidateSize();
+                // Keep centered
+                if (data && data.center_wgs84) {
+                    let cLat = data.center_wgs84.lat;
+                    let cLon = data.center_wgs84.lon;
+                    // Try to extract cell 4 center for better precision
+                    const c = data.surroundings?.grid3x3 || data.surroundings?.cells;
+                    if (c && c[4]) {
+                        cLat = c[4].center_wgs84.lat;
+                        cLon = c[4].center_wgs84.lon;
+                    }
+                    map.setView([cLat, cLon], map.getZoom(), { animate: false });
+                }
+            }
+        });
+        resizeObserver.observe(container);
+
+        // Add tiles first
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 22
+        }).addTo(map);
+
+        const cells = data.surroundings?.grid3x3 || data.surroundings?.cells;
+
+        // Center the map on the MIDDLE cell (Index 4 in 3x3 grid: NW, N, NE, W, C, E, SW, S, SE)
+        // This ensures the "main box" is perfectly centered.
+        let centerLat = data.center_wgs84.lat;
+        let centerLon = data.center_wgs84.lon;
+
+        if (cells && cells[4] && cells[4].center_wgs84) {
+            centerLat = cells[4].center_wgs84.lat;
+            centerLon = cells[4].center_wgs84.lon;
+        }
+
+        map.setView([centerLat, centerLon], 18);
+
+        // Render target marker
+        L.circleMarker([data.center_wgs84.lat, data.center_wgs84.lon], {
+            radius: 5, fillColor: "#0076ff", color: "#fff", weight: 2, opacity: 1, fillOpacity: 1
+        }).addTo(map);
+
+        if (cells) {
+            cells.forEach((cell) => {
+                const center = cell.center_wgs84;
+                if (!center) return;
+
+                // Approximate box size (10m x 10m)
+                // 1 degree lat ~ 111,132m
+                // 1 degree lon ~ 111,132m * cos(lat)
+                const latOffset = (10.1 / 2) / 111132;
+                const lonOffset = (10.1 / 2) / (111132 * Math.cos(center.lat * (Math.PI / 180)));
+
+                const color = getColor(cell.noise.total);
+
+                L.rectangle([
+                    [center.lat - latOffset, center.lon - lonOffset],
+                    [center.lat + latOffset, center.lon + lonOffset]
+                ], {
+                    color: 'white', weight: 1, fillColor: color, fillOpacity: 0.6
+                }).addTo(map);
+            });
+        }
+
+        mapInitialized = true;
+    }
+
+    function getColor(noiseValue) {
+        if (!noiseValue) return '#ccc';
+        const numbers = noiseValue.match(/\d+/g);
+        if (!numbers || numbers.length === 0) {
+            if (noiseValue.includes("< 55")) return '#1b5e20';
+            return '#ccc';
+        }
+        const maxVal = Math.max(...numbers.map(Number));
+
+        if (maxVal <= 55) return '#1b5e20';
+        if (maxVal <= 59) return '#2ecc71';
+        if (maxVal <= 64) return '#f1c40f';
+        if (maxVal <= 69) return '#e74c3c';
+        return '#650c51';
+    }
+
     // Since ImmoScout is a SPA, we need to watch for changes
     const observer = new MutationObserver(debounce(() => {
         init();
@@ -341,5 +471,14 @@
             clearTimeout(timeout);
             timeout = setTimeout(later, wait);
         };
+    }
+
+    /**
+     * Translates German noise level descriptions to symbols.
+     * Shared logic with the worker to ensure fallback data is also in English/Symbols.
+     */
+    function translateNoiseLevel(text) {
+        if (!text) return text;
+        return text.replace(/\bbis\b/g, "<").replace(/\bab\b/g, ">").replace(/bis zu/g, "<=");
     }
 })();
