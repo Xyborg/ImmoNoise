@@ -159,12 +159,30 @@
         mapEl.id = 'immo-noise-map';
         badgeElement.appendChild(mapEl);
 
-        // Info Section (Layman Explanation)
+        // Info Section (Layman Explanation + Links)
         const infoEl = document.createElement('div');
         infoEl.className = 'immo-noise-info';
         infoEl.innerHTML = `
             <p><strong>How it works:</strong> We use the address data found in this listing to fetch high-precision noise maps from the <a href="https://www.berlin.de/umweltatlas/en/traffic-noise/noise-pollution/" target="_blank" rel="noopener noreferrer"><strong>Berlin Environmental Atlas</strong></a> <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" style="width: 12px; height: 12px; display: inline-block; vertical-align: middle; margin-left: 2px;"><rect width="256" height="256" fill="none"/><polyline points="216 104 215.99 40.01 152 40" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><line x1="136" y1="120" x2="216" y2="40" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/><path d="M184,136v72a8,8,0,0,1-8,8H48a8,8,0,0,1-8-8V80a8,8,0,0,1,8-8h72" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16"/></svg>.</p>
             <p>This shows you the expected noise from road traffic and trains at this exact location, helping you understand the environment before you step inside.</p>
+            
+            <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(0,0,0,0.06);">
+                <div style="margin-bottom: 6px; font-weight: 600; opacity: 0.9;">Useful Links</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <a href="https://pdfprotect.io" title="Watermark PDFs. Protect your documents during your application process." target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: #333; background: rgba(0,0,0,0.03); padding: 6px 10px; border-radius: 6px; display: flex; align-items: center; gap: 6px; transition: background 0.2s;">
+                        <span style="opacity: 0.5;">🔒</span> Watermark PDFs
+                    </a>
+                    <a href="https://allaboutberlin.com/guides/moving-to-berlin" title="Moving to Berlin" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: #333; background: rgba(0,0,0,0.03); padding: 6px 10px; border-radius: 6px; display: flex; align-items: center; gap: 6px; transition: background 0.2s;">
+                        <span style="opacity: 0.5;">📦</span> Moving to Berlin
+                    </a>
+                    <a href="https://allaboutberlin.com/guides/find-a-flat-in-berlin" title="Find a Flat in Berlin" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: #333; background: rgba(0,0,0,0.03); padding: 6px 10px; border-radius: 6px; display: flex; align-items: center; gap: 6px; transition: background 0.2s;">
+                        <span style="opacity: 0.5;">🏠</span> Find a Flat in Berlin
+                    </a>
+                    <a href="https://allaboutberlin.com/guides/housing-scams" title="Housing Scams" target="_blank" rel="noopener noreferrer" style="text-decoration: none; color: #333; background: rgba(0,0,0,0.03); padding: 6px 10px; border-radius: 6px; display: flex; align-items: center; gap: 6px; transition: background 0.2s;">
+                        <span style="opacity: 0.5;">⚠️</span> Housing Scams
+                    </a>
+                </div>
+            </div>
         `;
         badgeElement.appendChild(infoEl);
 
@@ -174,13 +192,13 @@
 
         const aboutToggle = document.createElement('button');
         aboutToggle.className = 'immo-noise-toggle';
-        aboutToggle.innerText = 'About this';
+        aboutToggle.innerText = 'View Map';
         // Use addEventListener for better reliability
         aboutToggle.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
             badgeElement.classList.toggle('is-expanded');
-            aboutToggle.innerText = badgeElement.classList.contains('is-expanded') ? 'Close information' : 'About this';
+            aboutToggle.innerText = badgeElement.classList.contains('is-expanded') ? 'Close Map' : 'View Map';
         });
 
         footerEl.appendChild(aboutToggle);
