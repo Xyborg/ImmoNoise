@@ -113,41 +113,58 @@
                 const entryEl = document.createElement('div');
                 entryEl.className = 'immo-noise-entry';
 
-                const labelEl = document.createElement('div');
-                labelEl.className = 'immo-noise-label';
-                labelEl.innerText = res.label;
-
-                const valueEl = document.createElement('div');
-                valueEl.className = 'immo-noise-value';
+                // Category label (small, at top)
+                const categoryEl = document.createElement('div');
+                categoryEl.className = 'immo-noise-category';
+                categoryEl.innerText = res.label;
 
                 if (res.error) {
-                    valueEl.innerText = 'N/A';
-                    valueEl.style.color = '#ccc';
+                    const errorEl = document.createElement('div');
+                    errorEl.className = 'immo-noise-context-label';
+                    errorEl.innerText = 'N/A';
+                    errorEl.style.color = '#ccc';
                     entryEl.title = res.error;
+                    entryEl.appendChild(categoryEl);
+                    entryEl.appendChild(errorEl);
                 } else {
-                    valueEl.innerText = res.value;
-
-                    // Robust color coding logic using numeric extraction
+                    // Extract max dB for classification
                     const numbers = res.value.match(/\d+/g);
                     if (numbers && numbers.length > 0) {
                         const maxVal = Math.max(...numbers.map(Number));
+                        const context = getNoiseContext(maxVal);
 
+                        // Context label (main, large)
+                        const contextEl = document.createElement('div');
+                        contextEl.className = 'immo-noise-context-label';
+                        contextEl.innerText = context.label;
+
+                        // Apply color class
                         if (maxVal <= 55) {
-                            valueEl.classList.add('immo-noise-level-none');
+                            contextEl.classList.add('immo-noise-level-none');
                         } else if (maxVal <= 59) {
-                            valueEl.classList.add('immo-noise-level-low');
+                            contextEl.classList.add('immo-noise-level-low');
                         } else if (maxVal <= 64) {
-                            valueEl.classList.add('immo-noise-level-mid');
+                            contextEl.classList.add('immo-noise-level-mid');
                         } else if (maxVal <= 69) {
-                            valueEl.classList.add('immo-noise-level-high');
+                            contextEl.classList.add('immo-noise-level-high');
                         } else {
-                            valueEl.classList.add('immo-noise-level-extreme');
+                            contextEl.classList.add('immo-noise-level-extreme');
                         }
+
+                        // dB value (small, below)
+                        const dbEl = document.createElement('div');
+                        dbEl.className = 'immo-noise-db-value';
+                        dbEl.innerText = res.value;
+
+                        // Tooltip on hover
+                        entryEl.title = context.tooltip;
+
+                        entryEl.appendChild(categoryEl);
+                        entryEl.appendChild(contextEl);
+                        entryEl.appendChild(dbEl);
                     }
                 }
 
-                entryEl.appendChild(labelEl);
-                entryEl.appendChild(valueEl);
                 bodyEl.appendChild(entryEl);
             });
         }
@@ -192,13 +209,13 @@
 
         const aboutToggle = document.createElement('button');
         aboutToggle.className = 'immo-noise-toggle';
-        aboutToggle.innerText = 'View Map';
+        aboutToggle.innerText = 'More Details';
         // Use addEventListener for better reliability
         aboutToggle.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
             badgeElement.classList.toggle('is-expanded');
-            aboutToggle.innerText = badgeElement.classList.contains('is-expanded') ? 'Close Map' : 'View Map';
+            aboutToggle.innerText = badgeElement.classList.contains('is-expanded') ? 'Close' : 'More Details';
         });
 
         footerEl.appendChild(aboutToggle);
@@ -498,5 +515,13 @@
     function translateNoiseLevel(text) {
         if (!text) return text;
         return text.replace(/\bbis\b/g, "<").replace(/\bab\b/g, ">").replace(/bis zu/g, "<=");
+    }
+
+    function getNoiseContext(dB) {
+        if (dB <= 55) return { label: 'Quiet', tooltip: 'Like a library or bird calls 🌿' };
+        if (dB <= 59) return { label: 'Moderate', tooltip: 'Like a refrigerator or quiet conversation 🗣️' };
+        if (dB <= 64) return { label: 'Noisy', tooltip: 'Like a TV or open-plan office 📺' };
+        if (dB <= 69) return { label: 'Loud', tooltip: 'Like city traffic or a vacuum cleaner 🚗' };
+        return { label: 'Very Loud', tooltip: 'Like a hair dryer or busy street 📢' };
     }
 })();

@@ -83,10 +83,12 @@
 .immo-noise-entry {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   width: 100%;
   padding-bottom: 8px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  text-align: center;
+  align-items: center;
 }
 
 .immo-noise-entry:last-child {
@@ -94,6 +96,31 @@
   border-bottom: none;
 }
 
+/* Category label (small, at top) */
+.immo-noise-category {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+  color: #888;
+}
+
+/* Context label (main, large) */
+.immo-noise-context-label {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+/* dB value (small, below) */
+.immo-noise-db-value {
+  font-size: 11px;
+  font-weight: 500;
+  color: #666;
+  line-height: 1.2;
+}
+
+/* Legacy styles - kept for backwards compatibility */
 .immo-noise-label {
   font-size: 9px;
   text-transform: uppercase;
@@ -106,6 +133,14 @@
   font-size: 15px;
   font-weight: 700;
   color: var(--immo-noise-accent);
+}
+
+.immo-noise-cue {
+  font-size: 11px;
+  font-weight: 500;
+  color: #666;
+  margin-top: 2px;
+  line-height: 1.2;
 }
 
 /* Expanded State: Horizontal Columns */
@@ -216,22 +251,28 @@
   }
 }
 
+/* Color coding for context labels */
+.immo-noise-context-label.immo-noise-level-none,
 .immo-noise-value.immo-noise-level-none {
   color: #1b5e20 !important;
 }
 
+.immo-noise-context-label.immo-noise-level-low,
 .immo-noise-value.immo-noise-level-low {
   color: #2ecc71 !important;
 }
 
+.immo-noise-context-label.immo-noise-level-mid,
 .immo-noise-value.immo-noise-level-mid {
   color: #f1c40f !important;
 }
 
+.immo-noise-context-label.immo-noise-level-high,
 .immo-noise-value.immo-noise-level-high {
   color: #e74c3c !important;
 }
 
+.immo-noise-context-label.immo-noise-level-extreme,
 .immo-noise-value.immo-noise-level-extreme {
   color: #650c51 !important;
 }
