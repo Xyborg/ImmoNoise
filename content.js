@@ -9,6 +9,16 @@
     // Final custom domain for your Worker
     const WORKER_URL = 'https://api-immonoise.martinaberastegue.com';
 
+    // Map the three layers we query. Reused for proxy fallback.
+    const LAYER_NAMES = {
+        road: 'bb_strasse_gesamt_den2022',
+        rail: 'bc_tram_ubahn_den2022',
+        total: 'bf_gesamtlaerm_den2022'
+    };
+
+    const hasUsableValue = (value) => typeof value === 'string' && /\d+/.test(value);
+    const logDebug = (..._args) => {};
+
     function getIS24Data() {
         try {
             const scripts = document.querySelectorAll('script');
@@ -37,7 +47,7 @@
                 }
             }
         } catch (e) {
-            console.error("ImmoNoise: Error extracting IS24 data", e);
+            logDebug("ImmoNoise: Error extracting IS24 data", e);
         }
         return null;
     }
@@ -63,7 +73,7 @@
                 }
             }
         } catch (e) {
-            console.error("ImmoNoise: Error detecting city", e);
+            logDebug("ImmoNoise: Error detecting city", e);
         }
         return null;
     }
@@ -118,12 +128,12 @@
                 categoryEl.className = 'immo-noise-category';
                 categoryEl.innerText = res.label;
 
-                if (res.error) {
+                if (res.error || !hasUsableValue(res.value)) {
                     const errorEl = document.createElement('div');
                     errorEl.className = 'immo-noise-context-label';
                     errorEl.innerText = 'N/A';
                     errorEl.style.color = '#ccc';
-                    entryEl.title = res.error;
+                    entryEl.title = res.error || 'Noise value unavailable';
                     entryEl.appendChild(categoryEl);
                     entryEl.appendChild(errorEl);
                 } else {
@@ -239,9 +249,19 @@
         try {
             const response = await fetch(`${WORKER_URL}/noise/v1?address=${encodeURIComponent(address)}`);
             if (!response.ok) throw new Error(`Worker returned ${response.status}`);
-            return await response.json();
+            const data = await response.json();
+            const noise = data?.noise;
+            const validNoise =
+                noise &&
+                hasUsableValue(noise.road) &&
+                hasUsableValue(noise.rail) &&
+                hasUsableValue(noise.total);
+            if (!validNoise) {
+                throw new Error("Worker returned empty noise values");
+            }
+            return data;
         } catch (err) {
-            console.warn("ImmoNoise: Worker fetch failed, falling back to local.", err);
+            logDebug("ImmoNoise: Worker fetch failed, falling back to local.", err);
             return null;
         }
     }
@@ -287,7 +307,7 @@
 
             return translateNoiseLevel(dbaValue || "bis 55 dB(A)");
         } catch (err) {
-            console.error(`ImmoNoise Error [${layerName}]:`, err);
+            logDebug(`ImmoNoise Error [${layerName}]:`, err);
             throw err;
         }
     }
@@ -343,10 +363,16 @@
                 } else {
                     // Fallback: Fetch all sources in parallel locally
                     const [roadNoise, railNoise, totalNoise] = await Promise.allSettled([
-                        fetchLayerData(addressToLookup, 'bb_strasse_gesamt_den2022'),
-                        fetchLayerData(addressToLookup, 'bc_tram_ubahn_den2022'),
-                        fetchLayerData(addressToLookup, 'bf_gesamtlaerm_den2022')
+                        fetchLayerData(addressToLookup, LAYER_NAMES.road),
+                        fetchLayerData(addressToLookup, LAYER_NAMES.rail),
+                        fetchLayerData(addressToLookup, LAYER_NAMES.total)
                     ]);
+
+                    const allFailed = [roadNoise, railNoise, totalNoise].every(r => r.status === 'rejected');
+                    if (allFailed) {
+                        createBadge([], "Berlin.de noise services are temporarily unavailable. Please try again later.");
+                        return;
+                    }
 
                     createBadge([
                         {
@@ -367,7 +393,7 @@
                     ]);
                 }
             } catch (err) {
-                console.error("ImmoNoise Global Error:", err);
+                logDebug("ImmoNoise Global Error:", err);
             }
         };
 
