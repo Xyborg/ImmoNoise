@@ -2,6 +2,7 @@
 .dev.vars
 releases/
 worker/
+firefox/
 build_release.py
 store_description.md
 surroundings_map.html
