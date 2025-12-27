@@ -78,6 +78,89 @@
         return null;
     }
 
+    function normalizeAddressText(text) {
+        if (!text) return null;
+        const cleaned = text
+            .replace(/\s+/g, ' ')
+            .replace(/\s*,\s*/g, ', ')
+            .replace(/,\s*,/g, ', ')
+            .replace(/,\s*$/, '')
+            .trim();
+        return cleaned || null;
+    }
+
+    function ensureCityInAddress(address, cityName) {
+        if (!address || !cityName) return address;
+        const cityRegex = new RegExp(`\\b${cityName}\\b`, 'i');
+        if (!cityRegex.test(address)) {
+            return `${address}, ${cityName}`;
+        }
+        return address;
+    }
+
+    function getLivingInBerlinAddress() {
+        try {
+            const xpath = '/html/body/div[1]/div/div[5]/div[2]/dl/dd[2]';
+            const node = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+            const text = node?.textContent;
+            if (text) {
+                return normalizeAddressText(text);
+            }
+        } catch (e) {
+            logDebug("ImmoNoise: Error extracting LivingInBerlin address", e);
+        }
+        return null;
+    }
+
+    async function geosearchCenterWgs84(address) {
+        try {
+            const encodedAddress = encodeURIComponent(address);
+            // Rough WGS84 bbox covering Berlin
+            const berlinBBox4326 = "13.0,52.3,13.9,52.7";
+            const url =
+                `https://gdi.berlin.de/searches/bkg/geosearch?` +
+                `bbox=${berlinBBox4326}&outputformat=json&srsName=EPSG:4326&count=1&query=${encodedAddress}`;
+
+            const geo = await fetch(url, {
+                headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest" }
+            }).then(r => r.json());
+
+            const coords = geo.features?.[0]?.geometry?.coordinates;
+            if (!coords || coords.length < 2) return null;
+            return { lat: coords[1], lon: coords[0] };
+        } catch (e) {
+            logDebug("ImmoNoise: geosearchCenterWgs84 failed", e);
+            return null;
+        }
+    }
+
+    function buildSyntheticGrid(center, noise) {
+        if (!center) return null;
+        const latDelta = (10.1 / 111132); // ~10m north/south
+        const lonDelta = (10.1 / (111132 * Math.cos(center.lat * (Math.PI / 180)))); // ~10m east/west adjusted for latitude
+        const offsets = [-1, 0, 1];
+        const cells = [];
+        offsets.forEach(dy => {
+            offsets.forEach(dx => {
+                cells.push({
+                    center_wgs84: {
+                        lat: center.lat + dy * latDelta,
+                        lon: center.lon + dx * lonDelta
+                    },
+                    noise: {
+                        total: noise.total,
+                        road: noise.road,
+                        rail: noise.rail
+                    }
+                });
+            });
+        });
+        return {
+            center_wgs84: center,
+            surroundings: { grid3x3: cells }
+        };
+    }
+
     function createBadge(results, cityMessage = null) {
         if (badgeElement) {
             badgeElement.remove();
@@ -226,6 +309,14 @@
             e.stopPropagation();
             badgeElement.classList.toggle('is-expanded');
             aboutToggle.innerText = badgeElement.classList.contains('is-expanded') ? 'Close' : 'More Details';
+            // (Re)initialize map on expand to ensure correct sizing & data
+            if (badgeElement.classList.contains('is-expanded')) {
+                // give CSS a tick to apply height, then init/invalidate
+                setTimeout(() => {
+                    initMap(currentWorkerData);
+                    if (map) map.invalidateSize();
+                }, 60);
+            }
         });
 
         footerEl.appendChild(aboutToggle);
@@ -240,6 +331,10 @@
             setTimeout(() => {
                 initMap(currentWorkerData);
             }, 50);
+            // Safety: retry after expand-transition time in case first run happened before sizing
+            setTimeout(() => {
+                if (!mapInitialized) initMap(currentWorkerData);
+            }, 250);
         }
 
         return badgeElement;
@@ -314,18 +409,35 @@
 
     function init() {
         const run = async () => {
-            const addressEl = document.querySelector('.address-block');
-            if (!addressEl) return;
+            const host = window.location.hostname;
+            const isImmobilienScout = host.includes('immobilienscout24.de');
+            const isLivingInBerlin = host.includes('livinginberlin.de');
 
-            const addressText = addressEl.innerText.replace(/\n/g, ', ').trim();
+            if (!isImmobilienScout && !isLivingInBerlin) return;
+
+            let addressText = null;
+            let is24Data = null;
+            let city = null;
+
+            if (isImmobilienScout) {
+                const addressEl = document.querySelector('.address-block');
+                if (!addressEl) return;
+
+                addressText = normalizeAddressText(addressEl.innerText.replace(/\n/g, ', '));
+                is24Data = getIS24Data();
+                city = is24Data?.city || detectCity();
+            } else if (isLivingInBerlin) {
+                addressText = getLivingInBerlinAddress();
+                city = 'Berlin';
+            }
+
+            if (!addressText) return;
+
             if (addressText === currentAddress) return;
 
             currentAddress = addressText;
 
-            const is24Data = getIS24Data();
-
             // Step 1: Detect City & Handle Availability
-            const city = is24Data?.city || detectCity();
             const cityName = city || 'this city';
 
             if (cityName.toLowerCase() !== 'berlin') {
@@ -336,17 +448,21 @@
             // Step 2: Check Address Completeness
             let addressToLookup = addressText;
 
-            if (is24Data) {
+            if (isImmobilienScout && is24Data) {
                 if (!is24Data.isFullAddress) {
                     createBadge([], "No address available for this place.");
                     return;
                 }
                 // Construct high-quality address
                 // Format: Street HouseNumber, Zip City
-                addressToLookup = `${is24Data.street || ''} ${is24Data.houseNumber || ''}, ${is24Data.zip || ''} ${is24Data.city || ''}`.trim();
-                // Fix double commas if any parts were missing
-                addressToLookup = addressToLookup.replace(/,\s*,/g, ',').replace(/^,/, '').trim();
+                const constructedAddress = normalizeAddressText(`${is24Data.street || ''} ${is24Data.houseNumber || ''}, ${is24Data.zip || ''} ${is24Data.city || ''}`);
+                if (constructedAddress) {
+                    addressToLookup = constructedAddress;
+                }
             }
+
+            // LivingInBerlin pages do not expose city in the text, so enforce Berlin explicitly
+            addressToLookup = ensureCityInAddress(addressToLookup, 'Berlin');
 
             try {
                 // Try Worker first
@@ -372,6 +488,16 @@
                     if (allFailed) {
                         createBadge([], "Berlin.de noise services are temporarily unavailable. Please try again later.");
                         return;
+                    }
+
+                    // Build a lightweight synthetic grid for the map so users still see context when the Worker is unavailable.
+                    const fallbackCenter = await geosearchCenterWgs84(addressToLookup);
+                    if (fallbackCenter) {
+                        currentWorkerData = buildSyntheticGrid(fallbackCenter, {
+                            road: roadNoise.status === 'fulfilled' ? roadNoise.value : null,
+                            rail: railNoise.status === 'fulfilled' ? railNoise.value : null,
+                            total: totalNoise.status === 'fulfilled' ? totalNoise.value : null
+                        });
                     }
 
                     createBadge([
@@ -415,20 +541,100 @@
     let map = null;
     let mapInitialized = false;
     let currentWorkerData = null; // Store data for map usage
+    let htmlGridOverlay = null;
+
+    function renderHtmlGridOverlay(mapInstance, data) {
+        if (!mapInstance || !data) return;
+        const container = document.getElementById('immo-noise-map');
+        if (!container) return;
+
+        // Remove previous overlay
+        if (htmlGridOverlay && htmlGridOverlay.parentNode) {
+            htmlGridOverlay.parentNode.removeChild(htmlGridOverlay);
+        }
+
+        const cells = data.surroundings?.grid3x3 || data.surroundings?.cells;
+        if (!cells || cells.length === 0) return;
+
+        htmlGridOverlay = document.createElement('div');
+        htmlGridOverlay.id = 'immo-noise-grid-overlay';
+        htmlGridOverlay.style.position = 'absolute';
+        htmlGridOverlay.style.top = '0';
+        htmlGridOverlay.style.left = '0';
+        htmlGridOverlay.style.width = '100%';
+        htmlGridOverlay.style.height = '100%';
+        htmlGridOverlay.style.pointerEvents = 'none';
+        htmlGridOverlay.style.zIndex = '10000';
+        htmlGridOverlay.style.mixBlendMode = 'normal';
+        container.appendChild(htmlGridOverlay);
+
+        cells.forEach((cell) => {
+            const center = cell.center_wgs84;
+            if (!center) return;
+
+            const latOffset = (10.1 / 2) / 111132;
+            const lonOffset = (10.1 / 2) / (111132 * Math.cos(center.lat * (Math.PI / 180)));
+
+            const sw = L.latLng(center.lat - latOffset, center.lon - lonOffset);
+            const ne = L.latLng(center.lat + latOffset, center.lon + lonOffset);
+
+            const p1 = mapInstance.latLngToContainerPoint(sw);
+            const p2 = mapInstance.latLngToContainerPoint(ne);
+
+            const left = Math.min(p1.x, p2.x);
+            const top = Math.min(p1.y, p2.y);
+            const width = Math.abs(p1.x - p2.x);
+            const height = Math.abs(p1.y - p2.y);
+
+            const div = document.createElement('div');
+            div.className = 'immo-noise-grid-cell';
+            div.style.position = 'absolute';
+            div.style.left = `${left}px`;
+            div.style.top = `${top}px`;
+            div.style.width = `${width}px`;
+            div.style.height = `${height}px`;
+            div.style.background = getColor(cell.noise.total);
+            div.style.opacity = '0.72';
+            div.style.border = '1px solid #ffffff';
+            div.style.boxSizing = 'border-box';
+            div.style.pointerEvents = 'none';
+            htmlGridOverlay.appendChild(div);
+        });
+    }
 
     function initMap(data) {
         if (mapInitialized || !data || !data.center_wgs84) return;
 
         const container = document.getElementById('immo-noise-map');
         if (!container) return;
+        container.style.position = 'relative';
+        container.style.overflow = 'hidden';
 
-        // Use canvas for better performance and to avoid SVG issues in extensions
+        // Add scoped CSS to protect our overlay from host page styles
+        if (!container.querySelector('style[data-immo-noise-style]')) {
+            const styleEl = document.createElement('style');
+            styleEl.dataset.immoNoiseStyle = '1';
+            styleEl.textContent = `
+                #immo-noise-map .leaflet-immo-noise-pane path,
+                #immo-noise-map .leaflet-immo-noise-pane rect {
+                    vector-effect: non-scaling-stroke;
+                }
+            `;
+            container.appendChild(styleEl);
+        }
+
+        // Use SVG renderer (more robust against site-level canvas CSS) and set our own overlay pane
         map = L.map('immo-noise-map', {
             zoomControl: false,
             attributionControl: false,
             zoomSnap: 0.1,
-            preferCanvas: true
+            preferCanvas: false
         });
+
+        // Dedicated pane for noise overlay to keep it above tiles and site styles
+        const noisePane = map.createPane('immo-noise-pane');
+        noisePane.style.zIndex = '650';
+        noisePane.style.pointerEvents = 'none';
 
         // ResizeObserver to handle CSS transitions automatically
         const resizeObserver = new ResizeObserver(() => {
@@ -446,9 +652,16 @@
                     }
                     map.setView([cLat, cLon], map.getZoom(), { animate: false });
                 }
+                // Re-render HTML overlay to stay aligned after size changes
+                renderHtmlGridOverlay(map, data);
             }
         });
         resizeObserver.observe(container);
+
+        // Keep HTML overlay aligned on move/zoom
+        const reprojectOverlay = () => renderHtmlGridOverlay(map, data);
+        map.on('move', reprojectOverlay);
+        map.on('zoom', reprojectOverlay);
 
         // Add tiles first
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -471,32 +684,34 @@
 
         // Render target marker
         L.circleMarker([data.center_wgs84.lat, data.center_wgs84.lon], {
-            radius: 5, fillColor: "#0076ff", color: "#fff", weight: 2, opacity: 1, fillOpacity: 1
+            radius: 5, fillColor: "#0076ff", color: "#fff", weight: 2, opacity: 1, fillOpacity: 1, pane: 'immo-noise-pane'
         }).addTo(map);
+        forceNoiseStyles();
 
-        if (cells) {
-            cells.forEach((cell) => {
-                const center = cell.center_wgs84;
-                if (!center) return;
-
-                // Approximate box size (10m x 10m)
-                // 1 degree lat ~ 111,132m
-                // 1 degree lon ~ 111,132m * cos(lat)
-                const latOffset = (10.1 / 2) / 111132;
-                const lonOffset = (10.1 / 2) / (111132 * Math.cos(center.lat * (Math.PI / 180)));
-
-                const color = getColor(cell.noise.total);
-
-                L.rectangle([
-                    [center.lat - latOffset, center.lon - lonOffset],
-                    [center.lat + latOffset, center.lon + lonOffset]
-                ], {
-                    color: 'white', weight: 1, fillColor: color, fillOpacity: 0.6
-                }).addTo(map);
-            });
-        }
+        // Draw grid using HTML overlay (works on all hosts and prevents double grids)
+        renderHtmlGridOverlay(map, data);
 
         mapInitialized = true;
+    }
+
+    // Some hosts override SVG/Path styles globally; enforce ours with !important
+    function forceNoiseStyles() {
+        const pane = document.querySelector('.leaflet-immo-noise-pane');
+        if (!pane) return;
+        pane.querySelectorAll('path, rect').forEach(el => {
+            if (el.dataset.immoNoiseStyled) return;
+            const fill = el.getAttribute('fill') || el.style.fill || '#e74c3c';
+            const stroke = el.getAttribute('stroke') || el.style.stroke || '#ffffff';
+            const fillOpacity = el.getAttribute('fill-opacity') || el.style.fillOpacity || '0.72';
+            const strokeOpacity = el.getAttribute('stroke-opacity') || el.style.strokeOpacity || '1';
+            const strokeWidth = el.getAttribute('stroke-width') || el.style.strokeWidth || '1.2';
+            el.style.setProperty('fill', fill, 'important');
+            el.style.setProperty('fill-opacity', fillOpacity, 'important');
+            el.style.setProperty('stroke', stroke, 'important');
+            el.style.setProperty('stroke-opacity', strokeOpacity, 'important');
+            el.style.setProperty('stroke-width', strokeWidth, 'important');
+            el.dataset.immoNoiseStyled = '1';
+        });
     }
 
     function getColor(noiseValue) {
