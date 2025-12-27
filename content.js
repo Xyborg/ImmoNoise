@@ -431,7 +431,11 @@
             const isUrbanGround = host.includes('urbanground.de');
             const isUrbanGroundListing = isUrbanGround && location.pathname.includes('/wohnung-mieten-berlin/');
 
-            if (!isImmobilienScout && !isLivingInBerlin && !isUrbanGroundListing) {
+            // Guard: only run on listing pages we support
+            const isScoutListing = isImmobilienScout && location.pathname.includes('/expose/');
+            const isLivingListing = isLivingInBerlin && location.pathname.includes('/angebot/');
+
+            if (!isScoutListing && !isLivingListing && !isUrbanGroundListing) {
                 clearBadge();
                 return;
             }
