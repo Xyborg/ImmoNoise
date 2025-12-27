@@ -1,6 +1,6 @@
 # <img src="icon.svg" width="24" alt="ImmoNoise Logo"> ImmoNoise - Noise Pollution | Chrome Extension
 
-ImmoNoise is a Google Chrome extension that displays road, rail, and overall noise pollution levels directly on **ImmobilienScout24** property expose pages. Specifically designed for **Berlin**, it provides users with crucial environmental data before they even visit a property.
+ImmoNoise is a Google Chrome extension that displays road, rail, and overall noise pollution levels directly on **ImmobilienScout24**, **Living in Berlin**, and **Urbanground** property pages. Specifically designed for **Berlin**, it provides users with crucial environmental data before they even visit a property.
 
 ![ImmoNoise Preview](preview.png)
 
@@ -19,6 +19,7 @@ ImmoNoise is a Google Chrome extension that displays road, rail, and overall noi
   - 🔴 **Red**: 64 - 69 dB(A)
   - 🟣 **Purple**: 69 - 74 dB(A) (Loud)
 - **Interactive Noise Map**: View the noise data on a live map embedded directly in the badge, rendered locally with Leaflet.
+- **Supported Portals**: ImmobilienScout24, Living in Berlin, Urbanground (Berlin listings).
 
 ![ImmoNoise Preview](preview_map.png)
 - **Edge Caching**: Data is cached for 30 days at the edge, reducing total requests to `berlin.de` by ~90%.
@@ -31,7 +32,7 @@ ImmoNoise is a Google Chrome extension that displays road, rail, and overall noi
 3. Enable **Developer mode** (toggle in the top right corner).
 4. Click **Load unpacked**.
 5. Select the `ImmoNoise` folder where the `manifest.json` is located.
-6. Visit any ImmobilienScout24 Expose page in Berlin.
+6. Visit any ImmobilienScout24, Living in Berlin, or Urbanground listing in Berlin.
 
 ## Architecture
 
