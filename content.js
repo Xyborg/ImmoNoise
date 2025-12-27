@@ -112,6 +112,22 @@
         return null;
     }
 
+    function getUrbanGroundAddress() {
+        try {
+            const bySelector = document.querySelector('a.map-location');
+            const text = bySelector?.textContent;
+            if (text) return normalizeAddressText(text);
+
+            const xpath = '/html/body/app-root/app-property-details-page/section/div[1]/div[1]/div/div[2]/small/a';
+            const node = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+            const text2 = node?.textContent;
+            if (text2) return normalizeAddressText(text2);
+        } catch (e) {
+            logDebug("ImmoNoise: Error extracting UrbanGround address", e);
+        }
+        return null;
+    }
+
     async function geosearchCenterWgs84(address) {
         try {
             const encodedAddress = encodeURIComponent(address);
@@ -412,8 +428,13 @@
             const host = window.location.hostname;
             const isImmobilienScout = host.includes('immobilienscout24.de');
             const isLivingInBerlin = host.includes('livinginberlin.de');
+            const isUrbanGround = host.includes('urbanground.de');
+            const isUrbanGroundListing = isUrbanGround && location.pathname.includes('/wohnung-mieten-berlin/');
 
-            if (!isImmobilienScout && !isLivingInBerlin) return;
+            if (!isImmobilienScout && !isLivingInBerlin && !isUrbanGroundListing) {
+                clearBadge();
+                return;
+            }
 
             let addressText = null;
             let is24Data = null;
@@ -429,9 +450,15 @@
             } else if (isLivingInBerlin) {
                 addressText = getLivingInBerlinAddress();
                 city = 'Berlin';
+            } else if (isUrbanGroundListing) {
+                addressText = getUrbanGroundAddress();
+                city = 'Berlin';
             }
 
-            if (!addressText) return;
+            if (!addressText) {
+                clearBadge();
+                return;
+            }
 
             if (addressText === currentAddress) return;
 
@@ -461,7 +488,7 @@
                 }
             }
 
-            // LivingInBerlin pages do not expose city in the text, so enforce Berlin explicitly
+            // LivingInBerlin and UrbanGround pages should ensure Berlin is included
             addressToLookup = ensureCityInAddress(addressToLookup, 'Berlin');
 
             try {
@@ -542,6 +569,20 @@
     let mapInitialized = false;
     let currentWorkerData = null; // Store data for map usage
     let htmlGridOverlay = null;
+
+    function clearBadge() {
+        if (badgeElement) {
+            badgeElement.remove();
+            badgeElement = null;
+        }
+        if (map) {
+            map.remove();
+            map = null;
+        }
+        mapInitialized = false;
+        currentWorkerData = null;
+        currentAddress = null;
+    }
 
     function renderHtmlGridOverlay(mapInstance, data) {
         if (!mapInstance || !data) return;
@@ -730,12 +771,23 @@
         return '#650c51';
     }
 
-    // Since ImmoScout is a SPA, we need to watch for changes
+    // SPA support: watch DOM mutations and URL changes (Angular/React routers)
     const observer = new MutationObserver(debounce(() => {
         init();
-    }, 2000));
-
+    }, 600));
     observer.observe(document.body, { childList: true, subtree: true });
+
+    let lastUrl = location.href;
+    const checkUrlChange = () => {
+        if (location.href !== lastUrl) {
+            lastUrl = location.href;
+            clearBadge();
+            init();
+        }
+    };
+    window.addEventListener('popstate', checkUrlChange);
+    window.addEventListener('pushstate', checkUrlChange); // in case sites dispatch custom events
+    setInterval(checkUrlChange, 800);
 
     function debounce(func, wait) {
         let timeout;

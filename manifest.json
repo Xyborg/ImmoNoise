@@ -14,7 +14,8 @@
         {
             "matches": [
                 "https://www.immobilienscout24.de/expose/*",
-                "https://www.livinginberlin.de/angebot/*"
+                "https://www.livinginberlin.de/angebot/*",
+                "https://urbanground.de/de-DE/wohnung-mieten-berlin/*"
             ],
             "js": [
                 "lib/leaflet.js",
@@ -32,7 +33,7 @@
         "48": "icons/icon48.png",
         "128": "icons/icon128.png"
     },
-    "web_accessible_resources": [
+            "web_accessible_resources": [
         {
             "resources": [
                 "icons/*.png",
@@ -40,7 +41,8 @@
             ],
             "matches": [
                 "https://www.immobilienscout24.de/*",
-                "https://www.livinginberlin.de/*"
+                "https://www.livinginberlin.de/*",
+                "https://urbanground.de/*"
             ]
         }
     ]
